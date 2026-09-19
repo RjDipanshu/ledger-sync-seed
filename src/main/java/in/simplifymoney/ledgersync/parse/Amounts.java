@@ -15,11 +15,11 @@ public final class Amounts {
     private Amounts() {}
 
     private static final Pattern AMOUNT =
-            Pattern.compile("(?:Rs\\.?|INR)\\s*([0-9,]+\\.[0-9]{2})");
+            Pattern.compile("(?:Rs\\.?|INR)\\s*([0-9,]+(?:\\.[0-9]{2})?)");
 
     private static final Pattern BALANCE = Pattern.compile(
             "(?:Avl\\s*Bal|Available\\s*Balance|BalAvl|Avl\\s*Limit)\\s*:?\\s*"
-                    + "(?:Rs\\.?|INR)\\s*([0-9,]+\\.[0-9]{2})",
+                    + "(?:Rs\\.?|INR)?\\s*([0-9,]+(?:\\.[0-9]{2})?)",
             Pattern.CASE_INSENSITIVE);
 
     /** The transaction amount: the first rupee figure in the message. */
@@ -37,6 +37,6 @@ public final class Amounts {
     }
 
     private static BigDecimal toDecimal(String raw) {
-        return new BigDecimal(raw.replace(",", "")).setScale(2);
+        return new BigDecimal(raw.replace(",", "")).setScale(2, java.math.RoundingMode.UNNECESSARY);
     }
 }

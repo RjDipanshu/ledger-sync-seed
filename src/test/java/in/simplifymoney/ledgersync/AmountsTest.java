@@ -45,4 +45,26 @@ class AmountsTest {
     void ignoresAMessageWithNoAmountAtAll() {
         assertEquals(null, Amounts.first("Your Swiggy order is on the way!"));
     }
+
+    @Test
+    void readsWholeRupeeAmountWithoutDecimals() {
+        // Incident INC-2026-09-11 reproduction: ₹5 spent on water can with Avl Bal Rs.92,213.10
+        assertEquals(new BigDecimal("5.00"),
+                Amounts.first("Rs.5 debited from a/c **4821 on 04-07-26 at 07:19 to "
+                        + "UPI/WATER CAN. Avl Bal: Rs.92,213.10. Not you? Call 18002586161"));
+    }
+
+    @Test
+    void readsWholeRupeesWithThousandsSeparatorAndNoDecimals() {
+        assertEquals(new BigDecimal("18000.00"),
+                Amounts.first("Dear Customer, Acct XX9075 is credited with INR 18,000 "
+                        + "on 01/07/2026 21:14. Info: NEFT INWARD SELF. Avl Bal Rs.49,882.25"));
+    }
+
+    @Test
+    void readsWholeRupeeSpendWithTrailingPeriod() {
+        assertEquals(new BigDecimal("20.00"),
+                Amounts.first("Rs 20 debited from a/c **4821 on 06-07-26 at 20:36 to "
+                        + "UPI/WATER CAN. Avl Bal: Rs.79,769.69."));
+    }
 }

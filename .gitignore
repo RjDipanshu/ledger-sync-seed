@@ -8,3 +8,4 @@ submission/
 .idea/
 *.iml
 .DS_Store
+lib/
