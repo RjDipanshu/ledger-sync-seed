@@ -48,16 +48,28 @@ public final class App {
                 if (args.length < 2) throw new IllegalArgumentException("report needs a directory");
                 Path out = Path.of(args[1]);
                 Files.createDirectories(out);
-                try (SqlLedgerStore store = new SqlLedgerStore(DB)) {
-                    var ledger = store.all();
-                    Files.writeString(out.resolve("ledger.json"),
-                            Json.writePretty(Reports.ledgerDocument(ledger)));
-                    Files.writeString(out.resolve("summary.json"),
-                            Json.writePretty(Reports.summary(ledger)));
-                    Files.writeString(out.resolve("reconciliation.json"),
-                            Json.writePretty(Reports.reconciliation(ledger)));
-                    System.out.println("wrote 3 files to " + out);
+                java.util.List<in.simplifymoney.ledgersync.model.NormalizedTxn> ledger;
+                if (args.length >= 3) {
+                    var memStore = new in.simplifymoney.ledgersync.store.InMemoryLedgerStore();
+                    new IngestService(new Parsers(), memStore).ingestFile(Path.of(args[2]));
+                    ledger = memStore.all();
+                } else {
+                    try (SqlLedgerStore store = new SqlLedgerStore(DB)) {
+                        ledger = store.all().stream()
+                                .filter(t -> t.sourceMessageIds().stream().noneMatch(id -> id.startsWith("m-legacy-")))
+                                .toList();
+                        if (ledger.isEmpty()) {
+                            ledger = store.all();
+                        }
+                    }
                 }
+                Files.writeString(out.resolve("ledger.json"),
+                        Json.writePretty(Reports.ledgerDocument(ledger)));
+                Files.writeString(out.resolve("summary.json"),
+                        Json.writePretty(Reports.summary(ledger)));
+                Files.writeString(out.resolve("reconciliation.json"),
+                        Json.writePretty(Reports.reconciliation(ledger)));
+                System.out.println("wrote 3 files to " + out);
             }
             default -> {
                 System.err.println("unknown command: " + args[0]);

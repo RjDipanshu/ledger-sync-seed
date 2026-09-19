@@ -1,0 +1,10 @@
+{
+  "discrepancies": [
+    {
+      "account_last4": "4821",
+      "occurred_at": "2026-07-29T17:06:00+05:30",
+      "amount": "7500.00",
+      "note": "Unaccounted balance drop of Rs. 7500.00 between 2026-07-29 11:53 (bal 36054.05) and 2026-07-29 17:06 (stated bal 28479.05 vs expected 35979.05 after Rs 75.00 debit). No SMS or email was uploaded for this transaction."
+    }
+  ]
+}
