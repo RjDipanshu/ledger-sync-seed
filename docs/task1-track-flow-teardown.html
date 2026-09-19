@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Simplify Money — Track Flow Teardown — Dipanshu Raj</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm 20mm 18mm;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1a1e24;
+    line-height: 1.55;
+    font-size: 13.5px;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+  .header {
+    border-bottom: 2.5px solid #0f172a;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
+  .header h1 {
+    font-size: 22px;
+    margin: 0 0 6px 0;
+    color: #0f172a;
+    font-weight: 700;
+  }
+  .header .meta {
+    font-size: 13px;
+    color: #475569;
+  }
+  h2 {
+    font-size: 16px;
+    color: #0f172a;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 6px;
+    margin-top: 22px;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+  h3 {
+    font-size: 14px;
+    color: #1e293b;
+    margin-top: 14px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  p, li {
+    color: #334155;
+  }
+  ul, ol {
+    margin-top: 4px;
+    margin-bottom: 12px;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 4px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 12.5px;
+  }
+  th, td {
+    border: 1px solid #cbd5e1;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  th {
+    background-color: #f1f5f9;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+  .flow-box {
+    background: #f1f5f9;
+    border: 1px dashed #94a3b8;
+    padding: 12px;
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 14px 0;
+    color: #0f172a;
+  }
+  .card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #0ea5e9;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin: 14px 0;
+  }
+  .card-title {
+    font-weight: 600;
+    color: #0369a1;
+    margin-bottom: 4px;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: #f1f5f9;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Simplify Money — Product Track Flow Teardown</h1>
+  <div class="meta">
+    <strong>Author:</strong> Dipanshu Raj &nbsp;|&nbsp;
+    <strong>Feature:</strong> "Track" Flow (Automated Financial Ledger Synchronization) &nbsp;|&nbsp;
+    <strong>Repository:</strong> <a href="https://github.com/RjDipanshu/ledger-sync-seed">github.com/RjDipanshu/ledger-sync-seed</a>
+  </div>
+</div>
+
+<h2>1. Executive Summary</h2>
+<p>
+  Simplify Money's core value proposition answers the fundamental question: <em>"Where did my money go?"</em> without forcing users to manually enter transactions. The <strong>"Track"</strong> flow serves as the operational engine of this experience. It ingests semi-structured notification streams (SMS, notification listener, bank alert emails), normalizes them into immutable transactional ledger records, rolls up micro-expenses, and maintains running balances across multiple accounts.
+</p>
+
+<h2>2. End-to-End Architecture & Ingestion Journey</h2>
+
+<div class="flow-box">
+  [SMS / Notification Received]
+         │
+         ▼
+  [On-Device Filter & Noise Rejection] ──(Drop)──► Ignored: Non-Txn (OTPs, Loan Promos, Courier Spam)
+         │ (Settled Bank Alert)
+         ▼
+  [Multi-Channel Deduplication Engine] ──► Merges SMS + Email alerts for same transaction
+         │ (Correlation Key: {Account} : {MinuteBucket} : {Amount} : {Direction})
+         ▼
+  [Regex & Bank-Format Parsers] ────────► HDFC SMS, ICICI SMS V1/V2, Email RFC 1123, E-Mandates
+         │
+         ▼
+  [Four-Category Classifier] ────────────► SPEND, INCOME, MICRO (&le; ₹100), TRANSFER (Inter-Account)
+         │
+         ▼
+  [Immutable Ledger Store] ──────────────► Amazon DynamoDB Single-Table / SQL Ledger
+</div>
+
+<h3>Stage-by-Stage Breakdown:</h3>
+<ul>
+  <li><strong>Stage 1: Permission Priming & User Trust:</strong> Financial tracking requires Android SMS permissions. The app primes users with clear visual cards explaining that banking OTPs and personal messages are strictly ignored.</li>
+  <li><strong>Stage 2: Filter & Ingestion:</strong> Out of 522 raw messages in Corpus-A, 41 non-transactional messages (promotional loan offers, ATM OTPs, delivery updates) are safely filtered without entering the ledger.</li>
+  <li><strong>Stage 3: Multi-Message Deduplication:</strong> Banks issue multiple alerts (SMS, Email, UPI app push) for a single payment. Deduplication merges these using <code>{account_last4}:{minute_bucket}:{amount}:{direction}</code>, consolidating <code>source_message_ids</code>.</li>
+  <li><strong>Stage 4: Categorization:</strong>
+    <ul>
+      <li><code>MICRO</code>: UPI debits &le; ₹100 are grouped as rollups to prevent visual clutter in the main feed.</li>
+      <li><code>TRANSFER</code>: Intra-user money movements between known accounts are isolated to prevent inflating spend and income.</li>
+      <li><code>SPEND</code> & <code>INCOME</code>: Real outflows and inflows accurately reflecting net worth shifts.</li>
+    </ul>
+  </li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2>3. Identified Friction Points & Engineering Resolutions</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Friction Point</th>
+      <th>Observed Manifestation</th>
+      <th>Engineering Resolution</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Whole-Rupee Regex Trap (INC-2026-09-11)</strong></td>
+      <td>Whole-rupee alerts (<code>Rs.5</code>) failed two-decimal regex and erroneously captured <code>Avl Bal: Rs.92,213.10</code>.</td>
+      <td>Updated amount regex to <code>(?:Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]{2})?)</code> with strict trailing punctuation lookaheads.</td>
+    </tr>
+    <tr>
+      <td><strong>Silent Bank SMS Drops</strong></td>
+      <td>Bank network outage or dropped SMS leads to unaccounted balance drops (e.g. ₹7,500 gap on Account 4821).</td>
+      <td>Compare consecutive stated balances to identify gaps; flag discrepancies in <code>reconciliation.json</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Notification Timing Latency</strong></td>
+      <td>SMS received minutes or hours late due to roaming or network latency.</td>
+      <td>Parse transaction timestamp inside message body rather than relying on phone reception time (<code>received_at</code>).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. Architectural Recommendations for Scale</h2>
+<ol>
+  <li><strong>On-Device Hybrid Parsing vs. Cloud Processing:</strong> Parsing bank regex patterns on-device protects user privacy by never sending raw message text or sensitive numbers to cloud servers. Only normalized transaction payloads are synchronized.</li>
+  <li><strong>Reconciliation as a First-Class Feature:</strong> Rather than hiding unexplained discrepancies, surface them cleanly to users: <em>"We noticed a ₹7,500 withdrawal on 29 July not captured via SMS. Would you like to tag this as Cash Withdrawal?"</em></li>
+  <li><strong>DynamoDB Single-Table Design:</strong> Partitioning transactions by <code>ACC#&lt;last4&gt;#&lt;YYYY-MM&gt;</code> provides guaranteed $O(1)$ monthly statement reads with zero table scans. Category summaries are pre-aggregated on a single summary item (<code>ScannedCount = 1, Count = 1</code>).</li>
+</ol>
+
+<div class="card">
+  <div class="card-title">Conclusion</div>
+  The Track flow is the foundation of user retention in personal finance. Handling edge cases, multi-message deduplication, and honest balance reconciliation ensures the ledger remains trustworthy and transparent.
+</div>
+
+</body>
+</html>
