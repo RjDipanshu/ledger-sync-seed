@@ -11,12 +11,11 @@ import java.util.regex.Pattern;
 /**
  * HDFC Bank SMS.
  *
- * Two shapes are in production. The older one is a single sentence; the newer
- * one is multi-line and was rolled out partway through the window we have data
- * for. Both are handled here.
- *
- * Card messages ("spent on HDFC Bank Card x3310") are handled too - they quote
- * an available limit rather than an available balance.
+ * Handles:
+ * - V1: single sentence debit/credit notifications
+ * - V2: multi-line Sent/Received notifications
+ * - Card: credit card transactions ("spent on HDFC Bank Card x3310")
+ * - E-mandate: standing mandate debit notifications with balance confirmation
  */
 public final class HdfcSmsParser implements MessageParser {
 
@@ -37,9 +36,13 @@ public final class HdfcSmsParser implements MessageParser {
             "spent on HDFC Bank Card x(?<acct>\\d{4}) at (?<merchant>.+?) "
                     + "on (?<when>\\d{2}-\\d{2}-\\d{2} \\d{2}:\\d{2})\\.");
 
+    private static final Pattern EMANDATE = Pattern.compile(
+            "E-mandate!.*?A/c XX(?<acct>\\d{4}) on (?<when>\\d{2}-\\d{2}-\\d{2} at \\d{2}:\\d{2}) for (?<merchant>[^.]+)\\.",
+            Pattern.DOTALL);
+
     @Override
     public boolean supports(RawMessage m) {
-        return "sms".equals(m.channel()) && SENDER.equals(m.sender());
+        return "sms".equals(m.channel()) && (SENDER.equals(m.sender()) || (m.sender() != null && m.sender().contains("HDFCBK")));
     }
 
     @Override
@@ -65,6 +68,12 @@ public final class HdfcSmsParser implements MessageParser {
         if (card.find()) {
             return build(m, card.group("acct"), card.group("when"),
                     Direction.DEBIT, card.group("merchant"));
+        }
+
+        Matcher em = EMANDATE.matcher(body);
+        if (em.find()) {
+            return build(m, em.group("acct"), em.group("when").replace(" at ", " "),
+                    Direction.DEBIT, em.group("merchant"));
         }
 
         return Optional.empty();
